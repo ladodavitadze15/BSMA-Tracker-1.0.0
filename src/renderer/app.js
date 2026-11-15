@@ -173,6 +173,11 @@ const state = {
   activeTab: 'overview',
   syncTimer: null,
   activeSyllabusBook: null,
+  appVersion: '',
+  updateInfo: null,
+  updateDismissed: false,
+  updateDownloading: false,
+  updateProgressPct: 0,
 };
 
 // DOM refs
@@ -204,6 +209,21 @@ const sylOpenBtn = document.getElementById('syl-open-btn');
 const programSearchInput = document.getElementById('program-search');
 const weekSelectStudy = document.getElementById('week-select-study');
 const scanBtn = document.getElementById('scan-syllabuses-btn');
+const loginVersionPill = document.getElementById('login-version-pill');
+const loginUpdateSlot = document.getElementById('login-update-slot');
+const appVersionLabel = document.getElementById('app-version-label');
+const checkUpdateBtn = document.getElementById('check-update-btn');
+const updateStatusMsg = document.getElementById('update-status-msg');
+const updateBanner = document.getElementById('update-banner');
+const updateBannerTitle = document.getElementById('update-banner-title');
+const updateBannerVersions = document.getElementById('update-banner-versions');
+const updateBannerNotes = document.getElementById('update-banner-notes');
+const updateProgressWrap = document.getElementById('update-progress-wrap');
+const updateProgressFill = document.getElementById('update-progress-fill');
+const updateProgressText = document.getElementById('update-progress-text');
+const updateNowBtn = document.getElementById('update-now-btn');
+const updateNotesBtn = document.getElementById('update-notes-btn');
+const updateLaterBtn = document.getElementById('update-later-btn');
 
 function t(key, vars = {}) {
   const dict = window.I18N[state.lang] || window.I18N.en;
@@ -293,6 +313,19 @@ function parseWeekNumber(str) {
  * so e.g. a 20-pt Case Study held in Week 5 (10 pts) and Week 11 (10 pts)
  * shows Week 5 = 10/10 (100%) and Week 11 = —/10 (Upcoming) instead of 10/20!
  */
+function roundScore(val) {
+  return Math.round((Number(val) || 0) * 100) / 100;
+}
+
+function getEffectiveBookScore(book, analyzed = null) {
+  const an = analyzed || analyzeSubjectMarks(book);
+  const rawBookScore = Number(book?.score);
+  const bookScore = Number.isFinite(rawBookScore) ? rawBookScore : 0;
+  const earned = Number(an?.earnedSoFar || 0);
+  const summaryScore = Number(an?.summaryTotalScore || 0);
+  return roundScore(Math.max(bookScore, earned, summaryScore));
+}
+
 function splitComponentBySyllabus(comp) {
   const subDefs = Array.isArray(comp?.data?.items) ? comp.data.items : [];
   const gradeEntries = Array.isArray(comp?.items) ? comp.items : [];
@@ -301,8 +334,13 @@ function splitComponentBySyllabus(comp) {
 
   const entryByKey = new Map();
   gradeEntries.forEach((it, idx) => {
-    const k = it.key !== undefined && it.key !== null ? Number(it.key) : idx;
-    entryByKey.set(k, it);
+    if (it.key !== undefined && it.key !== null && it.key !== '') {
+      const numKey = Number(it.key);
+      if (Number.isFinite(numKey)) entryByKey.set(numKey, it);
+      entryByKey.set(String(it.key), it);
+    } else {
+      entryByKey.set(idx, it);
+    }
   });
 
   const subItems = [];
@@ -311,12 +349,16 @@ function splitComponentBySyllabus(comp) {
     subDefs.forEach((def, idx) => {
       const maxVal = Number(def.maxValue ?? def.weight ?? totalMax ?? 0);
       const weekNum = parseWeekNumber(def.name);
-      const entry = entryByKey.get(idx);
-      let hasGrade = entry !== undefined && entry.value !== '' && entry.value !== null && entry.value !== undefined;
+      const entry =
+        (def.key !== undefined && def.key !== null ? entryByKey.get(String(def.key)) : undefined) ||
+        (def.id !== undefined && def.id !== null ? entryByKey.get(String(def.id)) : undefined) ||
+        entryByKey.get(idx) ||
+        gradeEntries[idx];
+      let hasGrade = entry !== undefined && entry.value !== '' && entry.value !== null && entry.value !== undefined && Number.isFinite(Number(entry.value));
       let scoreVal = hasGrade ? Number(entry.value) : null;
 
       // Fallback if only 1 subDef and score is stored on comp.result
-      if (!hasGrade && subDefs.length === 1 && comp.result !== '' && comp.result !== null && comp.result !== undefined) {
+      if (!hasGrade && subDefs.length === 1 && comp.result !== '' && comp.result !== null && comp.result !== undefined && Number.isFinite(Number(comp.result))) {
         hasGrade = true;
         scoreVal = Number(comp.result);
       }
@@ -340,7 +382,7 @@ function splitComponentBySyllabus(comp) {
       });
     });
   } else if (totalMax > 0) {
-    const hasGrade = comp.result !== '' && comp.result !== null && comp.result !== undefined;
+    const hasGrade = comp.result !== '' && comp.result !== null && comp.result !== undefined && Number.isFinite(Number(comp.result));
     subItems.push({
       index: 0,
       weekNum: null,
@@ -353,13 +395,16 @@ function splitComponentBySyllabus(comp) {
     });
   }
 
-  const earnedSum = subItems.reduce((s, it) => s + (it.graded ? Number(it.score || 0) : 0), 0);
-  const gradedMaxSum = subItems.reduce((s, it) => s + (it.graded ? Number(it.maxValue || 0) : 0), 0);
+  const effectiveTotalMax = totalMax > 0
+    ? totalMax
+    : subItems.reduce((s, it) => s + Number(it.maxValue || 0), 0);
+  const earnedSum = roundScore(subItems.reduce((s, it) => s + (it.graded ? Number(it.score || 0) : 0), 0));
+  const gradedMaxSum = roundScore(subItems.reduce((s, it) => s + (it.graded ? Number(it.maxValue || 0) : 0), 0));
 
   return {
     title: getComponentDisplayName(comp),
     code: compCode,
-    totalMax,
+    totalMax: effectiveTotalMax,
     earnedSum,
     gradedMaxSum,
     subItems,
@@ -394,15 +439,23 @@ function analyzeSubjectMarks(book) {
 
   let earnedSoFar = 0;
   let gradedMaxSoFar = 0;
+  let summaryTotalScore = 0;
   const allSubTasks = [];
 
   for (const comp of comps) {
-    if (isAttendanceComponent(comp) || isSummaryComponent(comp)) continue;
+    if (isAttendanceComponent(comp)) continue;
+    if (isSummaryComponent(comp)) {
+      const resVal = Number(comp?.result);
+      if (Number.isFinite(resVal) && resVal > summaryTotalScore) {
+        summaryTotalScore = resVal;
+      }
+      continue;
+    }
     const split = splitComponentBySyllabus(comp);
     if (split.totalMax <= 0) continue;
 
-    earnedSoFar += split.earnedSum;
-    gradedMaxSoFar += split.gradedMaxSum;
+    earnedSoFar = roundScore(earnedSoFar + split.earnedSum);
+    gradedMaxSoFar = roundScore(gradedMaxSoFar + split.gradedMaxSum);
 
     for (const sub of split.subItems) {
       allSubTasks.push({
@@ -437,6 +490,7 @@ function analyzeSubjectMarks(book) {
   const result = {
     earnedSoFar,
     gradedMaxSoFar,
+    summaryTotalScore,
     accuracyPct,
     ratingComps,
     midtermComp,
@@ -478,6 +532,7 @@ function toggleLanguage() {
   state.analyzedCache.clear();
   applyTranslations();
   renderSavedAccounts();
+  renderUpdateUI();
   if (state.data) {
     renderAll();
   }
@@ -686,9 +741,9 @@ function renderOverview() {
           </div>
           <div class="metric-box">
             <div class="m-label">${escapeHtml(t('semesterTotal'))}</div>
-            <div class="m-val">${book.score} / 100</div>
+            <div class="m-val">${getEffectiveBookScore(book, an)} / 100</div>
             <div class="progress-track">
-              <div class="progress-fill" style="width:${Math.min(100, Number(book.score || 0))}%"></div>
+              <div class="progress-fill" style="width:${Math.min(100, getEffectiveBookScore(book, an))}%"></div>
             </div>
           </div>
         </div>
@@ -763,7 +818,7 @@ function renderMarksBySyllabus() {
       ...(an.finalComp ? [an.finalComp] : []),
     ];
 
-    const currentScore = Number(book.score || 0);
+    const currentScore = getEffectiveBookScore(book, an);
     const targets = [
       { grade: t('gradeE'), min: 51 },
       { grade: t('gradeC'), min: 71 },
@@ -788,7 +843,7 @@ function renderMarksBySyllabus() {
               ${escapeHtml(t('gradedSoFar'))}: ${an.earnedSoFar} / ${an.gradedMaxSoFar || 0} (${an.accuracyPct ?? 0}%)
             </span>
             <span class="badge badge-blue" style="font-size:12.5px;padding:5px 12px;">
-              ${escapeHtml(t('semesterTotal'))}: ${book.score} / 100
+              ${escapeHtml(t('semesterTotal'))}: ${currentScore} / 100
             </span>
           </div>
         </div>
@@ -868,18 +923,19 @@ function renderAnalytics() {
     }
 
     const acc = an.accuracyPct ?? 0;
+    const effectiveScore = getEffectiveBookScore(book, an);
     return `
       <div>
         <div class="bar-row-label">
           <strong>${escapeHtml(book.name)}</strong>
-          <span><span style="color:var(--green);font-weight:700;">${an.earnedSoFar}/${an.gradedMaxSoFar} (${acc}%)</span> • <span style="color:#93c5fd;">${book.score}/100</span></span>
+          <span><span style="color:var(--green);font-weight:700;">${an.earnedSoFar}/${an.gradedMaxSoFar} (${acc}%)</span> • <span style="color:#93c5fd;">${effectiveScore}/100</span></span>
         </div>
         <div class="dual-bars">
           <div class="progress-track" style="margin-top:0;height:8px;">
             <div class="progress-fill green" style="width:${Math.min(100, acc)}%"></div>
           </div>
           <div class="progress-track" style="margin-top:0;height:6px;">
-            <div class="progress-fill" style="width:${Math.min(100, Number(book.score || 0))}%"></div>
+            <div class="progress-fill" style="width:${Math.min(100, effectiveScore)}%"></div>
           </div>
         </div>
       </div>
@@ -1321,9 +1377,37 @@ function setSubjectGoal(bookId, letter) {
   localStorage.setItem(getGoalsStorageKey(state.username), JSON.stringify(state.goals));
 }
 
+function computeGoalSuccessRate({ currentScore, earnedSoFar, gradedMaxSoFar, totalOpen, needed, reachable }) {
+  if (needed <= 0) {
+    return { pacePct: 100, successRate: 100 };
+  }
+  if (!reachable || totalOpen <= 0) {
+    const pacePct = gradedMaxSoFar > 0 ? Math.round((earnedSoFar / gradedMaxSoFar) * 100) : Math.round(currentScore);
+    return { pacePct, successRate: 0 };
+  }
+
+  // Historical performance pace from gained marks vs graded potential so far
+  const paceRate = gradedMaxSoFar > 0
+    ? Math.max(0, Math.min(1, earnedSoFar / gradedMaxSoFar))
+    : (currentScore > 0 ? Math.max(0.4, Math.min(1, currentScore / 100)) : 0.75);
+  const pacePct = Math.round(paceRate * 100);
+
+  // Required scoring rate on remaining open potential
+  const reqRate = Math.max(0, Math.min(1.5, needed / totalOpen));
+  const margin = paceRate - reqRate;
+
+  // Confidence/steepness increases as more of the 100-point semester is already graded
+  const gradedShare = Math.max(0, Math.min(1, gradedMaxSoFar / 100));
+  const steepness = 7 + gradedShare * 6;
+  const logisticProb = 1 / (1 + Math.exp(-steepness * margin));
+
+  const successRate = Math.max(1, Math.min(99, Math.round(logisticProb * 100)));
+  return { pacePct, successRate };
+}
+
 function computeSubjectGoalPlan(book, goalLetter) {
   const an = analyzeSubjectMarks(book);
-  const currentScore = Number(book.score || 0);
+  const currentScore = getEffectiveBookScore(book, an);
   const goalObj = GOAL_GRADES.find((g) => g.letter === goalLetter) || GOAL_GRADES[0];
 
   let openRating = 0;
@@ -1343,18 +1427,27 @@ function computeSubjectGoalPlan(book, goalLetter) {
     }
   }
 
-  const totalOpen = openRating + openMidterm + openFinal;
-  const maxPossible = currentScore + totalOpen;
-  const maxPreFinal = preFinalEarned + openRating + openMidterm;
-  const needed = Math.max(0, goalObj.min - currentScore);
+  if (an.allSubTasks.length === 0 && currentScore > 0) {
+    preFinalEarned = currentScore;
+  }
+
+  openRating = roundScore(openRating);
+  openMidterm = roundScore(openMidterm);
+  openFinal = roundScore(openFinal);
+  preFinalEarned = roundScore(preFinalEarned);
+
+  const totalOpen = roundScore(openRating + openMidterm + openFinal);
+  const maxPossible = roundScore(currentScore + totalOpen);
+  const maxPreFinal = roundScore(preFinalEarned + openRating + openMidterm);
+  const needed = Math.max(0, roundScore(goalObj.min - currentScore));
   const reqPct = totalOpen > 0 ? Math.round((needed / totalOpen) * 100) : 0;
 
-  const reachable = maxPossible >= goalObj.min && maxPreFinal >= 31;
+  const reachable = maxPossible >= goalObj.min && (an.allSubTasks.length === 0 || maxPreFinal >= 31);
   const bestReachable = GOAL_GRADES.find((g) => maxPossible >= g.min)?.letter || 'F';
 
   // Pre-final 31+ admission rule check
-  const needForPreFinal = Math.max(0, 31 - preFinalEarned);
-  const openPreFinal = openRating + openMidterm;
+  const needForPreFinal = Math.max(0, roundScore(31 - preFinalEarned));
+  const openPreFinal = roundScore(openRating + openMidterm);
 
   // Smart proportional split across remaining buckets (keeping final >= 20 if final is open & needed >= 20)
   let planRating = 0;
@@ -1381,6 +1474,15 @@ function computeSubjectGoalPlan(book, goalLetter) {
     }
   }
 
+  const { pacePct, successRate } = computeGoalSuccessRate({
+    currentScore,
+    earnedSoFar: an.earnedSoFar,
+    gradedMaxSoFar: an.gradedMaxSoFar,
+    totalOpen,
+    needed,
+    reachable,
+  });
+
   return {
     goalObj,
     currentScore,
@@ -1395,6 +1497,8 @@ function computeSubjectGoalPlan(book, goalLetter) {
     openPreFinal,
     needed,
     reqPct,
+    pacePct,
+    successRate,
     reachable,
     bestReachable,
     planRating,
@@ -1420,6 +1524,9 @@ function renderGoals() {
   const totalNeeded = plans.reduce((s, p) => s + p.plan.needed, 0);
   const totalOpen = plans.reduce((s, p) => s + p.plan.totalOpen, 0);
   const overallReqPct = totalOpen > 0 ? Math.round((totalNeeded / totalOpen) * 100) : 0;
+  const avgSuccessRate = Math.round(plans.reduce((s, p) => s + p.plan.successRate, 0) / plans.length);
+  const jointSuccessRate = Math.round(plans.reduce((prod, p) => prod * (p.plan.successRate / 100), 1) * 100);
+  const overallSuccessColor = avgSuccessRate >= 75 ? 'var(--green)' : avgSuccessRate >= 50 ? 'var(--primary)' : avgSuccessRate >= 25 ? 'var(--amber)' : 'var(--red)';
 
   summaryEl.innerHTML = `
     <div class="kpi-card">
@@ -1433,14 +1540,14 @@ function renderGoals() {
       <div class="kpi-sub">${escapeHtml(t('kpiAllOnTrack'))}</div>
     </div>
     <div class="kpi-card">
+      <div class="kpi-label">${escapeHtml(t('goalSuccessRateLabel'))}</div>
+      <div class="kpi-value" style="color:${overallSuccessColor};">${avgSuccessRate}%</div>
+      <div class="kpi-sub">${escapeHtml(t('goalJointChance', { n: books.length, pct: jointSuccessRate }))}</div>
+    </div>
+    <div class="kpi-card">
       <div class="kpi-label">${escapeHtml(t('goalLabel'))}</div>
       <div class="kpi-value">${overallReqPct}%</div>
       <div class="kpi-sub">+${totalNeeded} / ${totalOpen} pts</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">${escapeHtml(t('kpiCurrentWeek'))}</div>
-      <div class="kpi-value">${escapeHtml(t('kpiWeekNumber', { w: state.detectedWeek }))}</div>
-      <div class="kpi-sub">${books.length * 100} max pts</div>
     </div>
   `;
 
@@ -1470,6 +1577,8 @@ function renderGoals() {
     }
 
     const progressPct = Math.min(100, Math.round((plan.currentScore / plan.goalObj.min) * 100));
+    const sr = plan.successRate;
+    const srBadgeClass = sr >= 75 ? 'badge-green' : sr >= 50 ? 'badge-blue' : sr >= 25 ? 'badge-amber' : 'badge-red';
 
     let preFinalMsg = '';
     if (plan.maxPreFinal < 31) {
@@ -1487,7 +1596,10 @@ function renderGoals() {
             <div class="row-title">${escapeHtml(book.name)}</div>
             <div class="row-sub">${plan.currentScore} / 100 • ${escapeHtml(t('goalMaxPossible', { max: plan.maxPossible }))}</div>
           </div>
-          ${statusBadge}
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+            <span class="badge ${srBadgeClass}">${escapeHtml(t('goalSuccessChance', { pct: sr }))}</span>
+            ${statusBadge}
+          </div>
         </div>
 
         <div class="goal-pill-group">${pillsHtml}</div>
@@ -1497,6 +1609,7 @@ function renderGoals() {
             <span>${plan.needed === 0 ? escapeHtml(t('goalReached')) : escapeHtml(t('goalNeedPts', { n: plan.needed, rem: plan.totalOpen, pct: plan.reqPct }))}</span>
             <strong>${plan.currentScore} / ${plan.goalObj.min}</strong>
           </div>
+          <div class="muted" style="font-size:11px;margin-top:2px;">${escapeHtml(t('goalPaceSummary', { pace: plan.pacePct, req: plan.reqPct }))}</div>
           <div class="progress-track">
             <div class="progress-fill ${barColor}" style="width:${progressPct}%"></div>
           </div>
@@ -2822,12 +2935,190 @@ function initCardSpotlight() {
   }, { passive: true });
 }
 
+async function loadAppVersion() {
+  try {
+    const v = await window.bsma.getVersion();
+    state.appVersion = v || '';
+    renderVersionPills();
+  } catch {
+    // ignore
+  }
+}
+
+function renderVersionPills() {
+  const text = state.appVersion ? `${t('versionLabel')} v${state.appVersion}` : 'v—';
+  if (loginVersionPill) loginVersionPill.textContent = text;
+  if (appVersionLabel) appVersionLabel.textContent = text;
+}
+
+function renderUpdateUI() {
+  renderVersionPills();
+  const info = state.updateInfo;
+  const hasUpdate = Boolean(info && info.status === 'available');
+
+  if (loginUpdateSlot) {
+    if (hasUpdate) {
+      loginUpdateSlot.textContent = t('updateAvailableTitle', { latest: info.latestVersion });
+      loginUpdateSlot.classList.remove('hidden');
+    } else {
+      loginUpdateSlot.classList.add('hidden');
+    }
+  }
+
+  if (!updateBanner) return;
+  if (!hasUpdate || state.updateDismissed) {
+    updateBanner.classList.add('hidden');
+    return;
+  }
+
+  updateBanner.classList.remove('hidden');
+  if (updateBannerTitle) {
+    updateBannerTitle.textContent = t('updateAvailableTitle', { latest: info.latestVersion });
+  }
+  if (updateBannerVersions) {
+    updateBannerVersions.textContent = t('updateVersionSub', {
+      current: info.currentVersion || state.appVersion,
+      latest: info.latestVersion,
+    });
+  }
+  if (updateBannerNotes) {
+    const firstLine = String(info.notes || '').split(/\r?\n/).find((l) => l.trim()) || '';
+    updateBannerNotes.textContent = firstLine;
+    updateBannerNotes.classList.toggle('hidden', !firstLine);
+  }
+  if (updateProgressWrap) {
+    updateProgressWrap.classList.toggle('hidden', !state.updateDownloading);
+  }
+  if (updateProgressFill) {
+    updateProgressFill.style.width = `${state.updateProgressPct}%`;
+  }
+  if (updateProgressText) {
+    updateProgressText.textContent = `${state.updateProgressPct}%`;
+  }
+  if (updateNowBtn) {
+    updateNowBtn.disabled = state.updateDownloading;
+    updateNowBtn.textContent = state.updateDownloading
+      ? t('updateDownloading', { pct: state.updateProgressPct })
+      : t('updateNowBtn');
+  }
+}
+
+async function runUpdateCheck({ manual = false } = {}) {
+  if (checkUpdateBtn) {
+    checkUpdateBtn.disabled = true;
+    checkUpdateBtn.textContent = t('checkingUpdates');
+  }
+  if (updateStatusMsg && manual) {
+    updateStatusMsg.textContent = t('checkingUpdates');
+    updateStatusMsg.classList.remove('hidden');
+  }
+
+  try {
+    const res = await window.bsma.checkForUpdates();
+    if (res && res.currentVersion) {
+      state.appVersion = res.currentVersion;
+    }
+    if (res && res.status === 'available') {
+      state.updateInfo = res;
+      state.updateDismissed = false;
+      if (updateStatusMsg) {
+        updateStatusMsg.textContent = t('updateAvailableTitle', { latest: res.latestVersion });
+        updateStatusMsg.classList.remove('hidden');
+      }
+    } else {
+      state.updateInfo = res || null;
+      if (updateStatusMsg && manual) {
+        updateStatusMsg.textContent = t('upToDateMsg', { v: state.appVersion || '1.0.1' });
+        updateStatusMsg.classList.remove('hidden');
+      }
+    }
+    renderUpdateUI();
+  } catch {
+    if (updateStatusMsg && manual) {
+      updateStatusMsg.textContent = t('updateFailed');
+      updateStatusMsg.classList.remove('hidden');
+    }
+  } finally {
+    if (checkUpdateBtn) {
+      checkUpdateBtn.disabled = false;
+      checkUpdateBtn.textContent = t('checkUpdatesBtn');
+    }
+  }
+}
+
+async function startUpdateInstall() {
+  const info = state.updateInfo;
+  if (!info || state.updateDownloading) return;
+  if (!info.downloadUrl) {
+    showToast(t('noInstallerAsset'));
+    if (info.releaseUrl) {
+      await window.bsma.openReleasePage(info.releaseUrl);
+    }
+    return;
+  }
+
+  state.updateDownloading = true;
+  state.updateProgressPct = 0;
+  renderUpdateUI();
+
+  try {
+    const res = await window.bsma.installUpdate({
+      downloadUrl: info.downloadUrl,
+      assetName: info.assetName,
+    });
+    if (!res || !res.ok) {
+      throw new Error(res?.error || 'Install failed');
+    }
+    if (updateNowBtn) updateNowBtn.textContent = t('updateLaunching');
+  } catch (err) {
+    state.updateDownloading = false;
+    renderUpdateUI();
+    showToast(`${t('updateInstallFailed')}: ${err?.message || ''}`.trim());
+  }
+}
+
 // Boot
 (async function init() {
   applyTheme();
   initBackgroundVfx();
   initCardSpotlight();
   applyTranslations();
+  await loadAppVersion();
+
+  if (checkUpdateBtn) {
+    checkUpdateBtn.addEventListener('click', () => runUpdateCheck({ manual: true }));
+  }
+  if (updateNowBtn) {
+    updateNowBtn.addEventListener('click', startUpdateInstall);
+  }
+  if (updateNotesBtn) {
+    updateNotesBtn.addEventListener('click', () => {
+      if (state.updateInfo?.releaseUrl) {
+        window.bsma.openReleasePage(state.updateInfo.releaseUrl);
+      }
+    });
+  }
+  if (updateLaterBtn) {
+    updateLaterBtn.addEventListener('click', () => {
+      state.updateDismissed = true;
+      renderUpdateUI();
+    });
+  }
+  if (loginUpdateSlot) {
+    loginUpdateSlot.addEventListener('click', () => {
+      if (state.updateInfo?.releaseUrl) {
+        window.bsma.openReleasePage(state.updateInfo.releaseUrl);
+      }
+    });
+  }
+  if (typeof window.bsma.onUpdateProgress === 'function') {
+    window.bsma.onUpdateProgress((payload) => {
+      state.updateDownloading = true;
+      state.updateProgressPct = Number(payload?.percent) || 0;
+      renderUpdateUI();
+    });
+  }
+
   const session = await window.bsma.getSession();
   state.savedAccounts = session.accounts || [];
 
@@ -2838,4 +3129,8 @@ function initCardSpotlight() {
   } else {
     showLogin();
   }
+
+  setTimeout(() => {
+    runUpdateCheck({ manual: false });
+  }, 2500);
 })();

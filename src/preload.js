@@ -16,4 +16,13 @@ contextBridge.exposeInMainWorld('bsma', {
   openSyllabusPdf: (bookId) => ipcRenderer.invoke('syllabus:openPdf', bookId),
   pickBackgroundImage: () => ipcRenderer.invoke('theme:pickBackgroundImage'),
   notify: (title, body) => ipcRenderer.invoke('notify:show', { title, body }),
+  getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  installUpdate: (info) => ipcRenderer.invoke('update:install', info),
+  openReleasePage: (url) => ipcRenderer.invoke('update:openReleasePage', url),
+  onUpdateProgress: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
+  },
 });

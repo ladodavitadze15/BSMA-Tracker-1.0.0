@@ -75,6 +75,10 @@
           Sign In
         </button>
       </form>
+      <div class="login-version-footer">
+        <span id="login-version-pill" class="version-pill">v—</span>
+        <button id="login-update-slot" type="button" class="login-update-pill hidden"></button>
+      </div>
     </div>
   </div>
 
@@ -145,6 +149,11 @@
           <button id="switch-account-btn" type="button" class="btn-ghost btn-sm" data-i18n="switchAccount">Switch Student</button>
           <button id="logout-btn" type="button" class="btn-ghost btn-sm btn-danger-ghost" data-i18n="signOut">Sign Out</button>
         </div>
+        <div class="sidebar-version-row">
+          <span id="app-version-label" class="version-pill">v—</span>
+          <button id="check-update-btn" type="button" class="btn-ghost btn-xs" data-i18n="checkUpdatesBtn">Check Updates</button>
+        </div>
+        <div id="update-status-msg" class="update-status-msg hidden"></div>
       </div>
     </aside>
 
@@ -164,6 +173,29 @@
         </div>
       </header>
 
+      <div id="update-banner" class="update-banner hidden">
+        <div class="update-banner-main">
+          <div class="update-banner-info">
+            <div class="update-banner-header">
+              <span class="update-dot"></span>
+              <strong id="update-banner-title">Update Available</strong>
+              <span id="update-banner-versions" class="version-pill"></span>
+            </div>
+            <p id="update-banner-notes" class="update-banner-notes"></p>
+            <div id="update-progress-wrap" class="update-progress-wrap hidden">
+              <div class="update-progress-track">
+                <div id="update-progress-fill" class="update-progress-fill"></div>
+              </div>
+              <span id="update-progress-text" class="update-progress-text">0%</span>
+            </div>
+          </div>
+          <div class="update-banner-actions">
+            <button id="update-now-btn" type="button" class="btn-primary btn-sm" data-i18n="updateNowBtn">Update Now</button>
+            <button id="update-notes-btn" type="button" class="btn-ghost btn-sm" data-i18n="releaseNotesBtn">Release Notes</button>
+            <button id="update-later-btn" type="button" class="btn-ghost btn-sm" data-i18n="updateLaterBtn">Later</button>
+          </div>
+        </div>
+      </div>
       <div id="sync-error" class="error-banner hidden"></div>
       <div id="toast-banner" class="toast-banner hidden"></div>
 

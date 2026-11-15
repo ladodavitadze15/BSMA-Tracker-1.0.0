@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const api = require('./api');
 const { SyllabusService } = require('./syllabus');
+const updater = require('./updater');
 
 const LEGACY_SESSION_FILE = path.join(app.getPath('userData'), 'session.json');
 const VAULT_FILE = path.join(app.getPath('userData'), 'auth-vault.json');
@@ -498,4 +499,28 @@ ipcMain.handle('notify:show', (_event, { title, body }) => {
   if (Notification.isSupported()) {
     new Notification({ title, body }).show();
   }
+});
+
+ipcMain.handle('app:getVersion', () => {
+  return app.getVersion();
+});
+
+ipcMain.handle('update:check', async () => {
+  return updater.checkForUpdates();
+});
+
+ipcMain.handle('update:install', async (_event, updateInfo) => {
+  return updater.downloadAndInstallUpdate(updateInfo || {}, (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update:progress', progress);
+    }
+  });
+});
+
+ipcMain.handle('update:openReleasePage', async (_event, url) => {
+  const target = typeof url === 'string' && url.startsWith('https://github.com/ladodavitadze15/BSMA-Tracker-1.0.0')
+    ? url
+    : updater.REPO_URL;
+  await shell.openExternal(target);
+  return { opened: true };
 });

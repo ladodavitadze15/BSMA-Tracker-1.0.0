@@ -1,6 +1,6 @@
 {
   "name": "bsma-tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Windows desktop academic tracker for Batumi State Maritime Academy (BSMA) students.",
   "main": "src/main.js",
   "scripts": {
