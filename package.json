@@ -1,0 +1,67 @@
+{
+  "name": "bsma-tracker",
+  "version": "1.0.0",
+  "description": "Windows desktop academic tracker for Batumi State Maritime Academy (BSMA) students.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "keywords": [
+    "bsma",
+    "student",
+    "electron",
+    "navigation"
+  ],
+  "author": "BSMA Student Community",
+  "license": "ISC",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.bsma.studenttracker",
+    "productName": "BSMA Student Tracker",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "assets/**/*"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BSMA Student Tracker"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "pdf-parse": "^2.4.5"
+  }
+}

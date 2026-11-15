@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build / release outputs (upload installers to GitHub Releases instead)
+dist/
+out/
+release/
+
+# Local secrets, logs & runtime cache
+*.log
+npm-debug.log*
+.env
+.env.*
+auth-vault.json
+session.json
+syllabus-cache/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/

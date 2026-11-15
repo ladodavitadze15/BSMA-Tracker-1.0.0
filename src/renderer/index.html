@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https: http:;" />
+  <title>BSMA Student Tracker</title>
+  <link rel="icon" type="image/png" href="../../assets/icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="anim-enabled">
+  <!-- CUSTOMIZABLE BACKGROUND LAYERS -->
+  <div id="bg-wallpaper" class="bg-wallpaper"></div>
+  <div class="bg-grid"></div>
+  <div id="bg-aura" class="bg-aura">
+    <div class="aura-orb orb-1"></div>
+    <div class="aura-orb orb-2"></div>
+    <div class="aura-orb orb-3"></div>
+  </div>
+  <canvas id="bg-canvas" class="bg-canvas"></canvas>
+  <div id="bg-dimmer" class="bg-dimmer"></div>
+
+  <!-- LOGIN VIEW -->
+  <div id="login-view" class="login-shell">
+    <div class="login-card glass-panel">
+      <div class="login-top-row">
+        <div class="login-brand-group">
+          <img src="../../assets/icon.png" alt="BSMA App Icon" class="brand-icon-img" />
+          <div class="brand-badge">BSMA</div>
+          <span class="portal-chip" data-i18n="portalBadge">Navigation &amp; Academy Portal</span>
+        </div>
+        <button id="login-lang-btn" type="button" class="lang-pill">EN / ქარ</button>
+      </div>
+      <h1 data-i18n="appName">Student Tracker</h1>
+      <p class="subtitle" data-i18n="loginSubtitle">Sign in with your study.bsma.edu.ge student account (works for all BSMA Navigation &amp; Academy students). Credentials stay encrypted locally via Windows DPAPI.</p>
+
+      <div id="login-status" class="info-banner hidden" style="margin-bottom:14px;"></div>
+
+      <div id="saved-accounts-section" class="saved-accounts-section hidden">
+        <div class="saved-accounts-title" data-i18n="savedAccountsTitle">Saved Accounts on This PC</div>
+        <div id="saved-accounts-list" class="saved-accounts-list"></div>
+        <div class="login-divider"><span data-i18n="orUseCredentials">or sign in with another student account</span></div>
+      </div>
+
+      <form id="login-form">
+        <div class="field">
+          <label for="username" data-i18n="studentIdLabel">Student ID / Username</label>
+          <input id="username" type="text" data-i18n-placeholder="studentIdPlaceholder" placeholder="Student ID or portal username" required autocomplete="username" />
+        </div>
+
+        <div class="field">
+          <label for="password" data-i18n="passwordLabel">Password</label>
+          <div class="password-input-wrap">
+            <input id="password" type="password" data-i18n-placeholder="passwordPlaceholder" placeholder="Enter your portal password" required autocomplete="current-password" />
+            <button id="toggle-password-btn" type="button" class="password-toggle-btn" title="Show or hide password" aria-label="Show or hide password">👁</button>
+          </div>
+        </div>
+
+        <div id="sms-field" class="field hidden">
+          <div class="sms-label-row">
+            <label for="smsCode" data-i18n="smsLabel" style="margin-bottom:0;">SMS Verification Code</label>
+            <button id="cancel-sms-btn" type="button" class="link-btn" data-i18n="cancelSmsBtn">Cancel / Different student</button>
+          </div>
+          <input id="smsCode" type="text" inputmode="numeric" data-i18n-placeholder="smsPlaceholder" placeholder="Enter SMS code" />
+        </div>
+
+        <label class="checkbox-row">
+          <input id="remember" type="checkbox" checked />
+          <span data-i18n="rememberMe">Remember account on this PC</span>
+        </label>
+
+        <div id="login-error" class="error-banner hidden"></div>
+
+        <button id="login-btn" type="submit" class="btn-primary full-width" data-i18n="signIn">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN APP VIEW -->
+  <div id="app-view" class="app-shell hidden">
+    <aside class="sidebar glass-panel">
+      <div class="sidebar-header">
+        <img src="../../assets/icon.png" alt="BSMA App Icon" class="brand-icon-img" />
+        <div>
+          <div class="brand-title">BSMA Tracker</div>
+          <div id="student-program" class="brand-sub">Loading...</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-tab="overview">
+          <span class="nav-icon">◈</span>
+          <span data-i18n="navOverview">Overview</span>
+        </button>
+        <button class="nav-item" data-tab="marks">
+          <span class="nav-icon">★</span>
+          <span data-i18n="navMarks">Marks by Syllabus</span>
+        </button>
+        <button class="nav-item" data-tab="analytics">
+          <span class="nav-icon">📊</span>
+          <span data-i18n="navAnalytics">Charts &amp; Analytics</span>
+        </button>
+        <button class="nav-item" data-tab="study">
+          <span class="nav-icon">📖</span>
+          <span data-i18n="navStudy">Weekly Study Material</span>
+        </button>
+        <button class="nav-item" data-tab="tests">
+          <span class="nav-icon">⚡</span>
+          <span data-i18n="navTests">Incoming Tests</span>
+        </button>
+        <button class="nav-item" data-tab="attendance">
+          <span class="nav-icon">⏳</span>
+          <span data-i18n="navAttendance">Attendance</span>
+        </button>
+        <button class="nav-item" data-tab="goals">
+          <span class="nav-icon">🎯</span>
+          <span data-i18n="navGoals">Grade Goals</span>
+        </button>
+        <button class="nav-item" data-tab="program">
+          <span class="nav-icon">🎓</span>
+          <span data-i18n="navProgram">Curriculum (8 Sem)</span>
+        </button>
+        <button class="nav-item" data-tab="exams">
+          <span class="nav-icon">🗓</span>
+          <span data-i18n="navExams">Final Exams</span>
+        </button>
+        <button class="nav-item" data-tab="customize">
+          <span class="nav-icon">🎨</span>
+          <span data-i18n="navCustomize">Customize &amp; Theme</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="app-lang-btn" type="button" class="btn-ghost full-width">EN / ქარ</button>
+        <div class="student-pill">
+          <div id="student-avatar" class="student-avatar">S</div>
+          <div class="student-pill-info">
+            <div id="student-name" class="student-name">Student</div>
+            <div id="student-id-label" class="student-meta">ID: —</div>
+          </div>
+        </div>
+        <div class="sidebar-auth-actions">
+          <button id="switch-account-btn" type="button" class="btn-ghost btn-sm" data-i18n="switchAccount">Switch Student</button>
+          <button id="logout-btn" type="button" class="btn-ghost btn-sm btn-danger-ghost" data-i18n="signOut">Sign Out</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar glass-panel">
+        <div>
+          <h2 id="page-title">Overview</h2>
+          <div id="last-synced" class="muted small">Not synced yet</div>
+        </div>
+        <div class="topbar-actions">
+          <select id="semester-select" class="select-input" title="Select Semester"></select>
+          <label class="auto-sync-toggle">
+            <input id="auto-sync" type="checkbox" checked />
+            <span data-i18n="autoSync">Auto-sync (15m)</span>
+          </label>
+          <button id="sync-btn" class="btn-primary" data-i18n="syncNow">Sync Now</button>
+        </div>
+      </header>
+
+      <div id="sync-error" class="error-banner hidden"></div>
+      <div id="toast-banner" class="toast-banner hidden"></div>
+
+      <!-- TAB 1: OVERVIEW (Focused Executive Summary) -->
+      <section id="tab-overview" class="tab-panel active">
+        <div class="kpi-grid" id="kpi-grid"></div>
+        <div class="card glass-panel">
+          <div class="card-header">
+            <div>
+              <h3 data-i18n="overviewSubjectCards">Current Semester Performance (Graded Accuracy vs Total 100)</h3>
+              <div class="muted small" data-i18n="overviewSubjectSub">Click any subject to inspect its week-by-week syllabus mark breakdown</div>
+            </div>
+          </div>
+          <div id="overview-subjects-grid" class="subjects-grid"></div>
+        </div>
+      </section>
+
+      <!-- TAB 2: MARKS BY SYLLABUS (Divided per Syllabus Activity & Week) -->
+      <section id="tab-marks" class="tab-panel hidden">
+        <div class="card glass-panel" style="margin-bottom:16px;">
+          <h3 data-i18n="marksHeaderTitle">Marks Divided by Syllabus &amp; Weekly Activities</h3>
+          <div class="muted small" data-i18n="marksHeaderSub">Each component is split into its individual syllabus weeks so you see your exact score per task (e.g. 10/10 in Week 5) instead of a combined semester total.</div>
+        </div>
+        <div id="marks-syllabus-container" class="marks-syllabus-stack"></div>
+      </section>
+
+      <!-- TAB 3: CHARTS & ANALYTICS (Animated SVG Diagrams) -->
+      <section id="tab-analytics" class="tab-panel hidden">
+        <div class="card glass-panel" style="margin-bottom:16px;">
+          <h3 data-i18n="analyticsTitle">Visual Analytics &amp; Diagrams</h3>
+          <div class="muted small" data-i18n="analyticsSub">Interactive charts of your current accuracy, point distribution, weekly test workload, and attendance</div>
+        </div>
+        <div id="analytics-container" class="analytics-grid"></div>
+      </section>
+
+      <!-- TAB 4: WEEKLY STUDY MATERIAL (Dedicated Study Plan & Books) -->
+      <section id="tab-study" class="tab-panel hidden">
+        <div class="card glass-panel" style="margin-bottom:16px;">
+          <div class="card-header wrap-header" style="margin-bottom:0;">
+            <div>
+              <h3 data-i18n="studyTabTitle">Weekly Study Plan &amp; Literature</h3>
+              <div id="study-tab-sub" class="muted small"></div>
+            </div>
+            <div class="inline-controls">
+              <label class="muted small" for="week-select-study" data-i18n="weekSliderLabel">Select Week:</label>
+              <select id="week-select-study" class="select-input compact"></select>
+              <button id="scan-syllabuses-btn" class="btn-primary compact-btn" data-i18n="scanAllSyllabuses">Refresh Syllabuses</button>
+            </div>
+          </div>
+        </div>
+        <div id="study-materials-grid" class="insights-grid"></div>
+      </section>
+
+      <!-- TAB 5: INCOMING TESTS (Dedicated Timeline of Tests & Quizzes) -->
+      <section id="tab-tests" class="tab-panel hidden">
+        <div class="card glass-panel" style="margin-bottom:16px;">
+          <div class="card-header wrap-header" style="margin-bottom:0;">
+            <div>
+              <h3 data-i18n="testsTabTitle">Incoming Tests, Quizzes &amp; Assignments</h3>
+              <div class="muted small" data-i18n="testsTabSub">Every upcoming assessment mapped by syllabus week &amp; exact point value</div>
+            </div>
+            <div id="tests-filter-pills" class="sem-pills" style="margin-bottom:0;"></div>
+          </div>
+        </div>
+        <div id="incoming-tests-container" class="tests-timeline-stack"></div>
+      </section>
+
+      <!-- TAB 6: ATTENDANCE (Dedicated Gauges & Skip Budget) -->
+      <section id="tab-attendance" class="tab-panel hidden">
+        <div class="card glass-panel" style="margin-bottom:16px;">
+          <h3 data-i18n="attTabTitle">Lecture, Seminar &amp; Lab Attendance</h3>
+          <div class="muted small" data-i18n="attTabSub">Minimum requirement: 50% Lectures, 70% Seminars/Labs. Completed requirements turn green automatically.</div>
+        </div>
+        <div id="attendance-summary" class="kpi-grid"></div>
+        <div id="attendance-grid" class="attendance-grid"></div>
+      </section>
+
+      <!-- TAB 7: GRADE GOALS (Target A / B / C Planner) -->
+      <section id="tab-goals" class="tab-panel hidden">
+        <div class="card glass-panel" style="margin-bottom:16px;">
+          <div class="card-header wrap-header" style="margin-bottom:0;">
+            <div>
+              <h3 data-i18n="goalsTitle">Target Grade &amp; Score Goals</h3>
+              <div class="muted small" data-i18n="goalsSub">Choose whether you want A (91+), B (81+), or C (71+) in each subject and get an exact plan for remaining tasks, midterm &amp; final exam</div>
+            </div>
+            <div class="inline-controls">
+              <span class="muted small" data-i18n="setAllTo">Quick set all:</span>
+              <button class="btn-ghost btn-sm" data-set-all-goal="A">A (91+)</button>
+              <button class="btn-ghost btn-sm" data-set-all-goal="B">B (81+)</button>
+              <button class="btn-ghost btn-sm" data-set-all-goal="C">C (71+)</button>
+            </div>
+          </div>
+        </div>
+        <div id="goals-summary" class="kpi-grid"></div>
+        <div id="goals-grid" class="goals-grid"></div>
+      </section>
+
+      <!-- TAB 7: EDUCATIONAL PROGRAM & SYLLABUSES -->
+      <section id="tab-program" class="tab-panel hidden">
+        <div class="program-toolbar card glass-panel">
+          <div>
+            <h3 id="program-header-title">Educational Program &amp; Syllabuses</h3>
+            <div id="program-header-sub" class="muted small"></div>
+          </div>
+          <div class="inline-controls">
+            <input id="program-search" type="search" class="search-input" data-i18n-placeholder="searchPlaceholder" placeholder="Search subjects..." />
+          </div>
+        </div>
+        <div id="program-sem-pills" class="sem-pills"></div>
+        <div id="program-content"></div>
+      </section>
+
+      <!-- TAB 8: FINAL EXAMS -->
+      <section id="tab-exams" class="tab-panel hidden">
+        <div id="exams-banner" class="info-banner"></div>
+        <div id="exams-list" class="exams-grid"></div>
+      </section>
+
+      <!-- TAB 9: CUSTOMIZE & THEME STUDIO -->
+      <section id="tab-customize" class="tab-panel hidden">
+        <div class="card glass-panel" style="margin-bottom:16px;">
+          <h3 data-i18n="customizeTitle">Appearance, Background &amp; UI Studio</h3>
+          <div class="muted small" data-i18n="customizeSub">Personalize your theme, background wallpaper, glass blur, accent colors, and animations</div>
+        </div>
+        <div id="customize-studio" class="customize-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- SUBJECT DETAIL MODAL -->
+  <div id="subject-modal" class="modal-backdrop hidden">
+    <div class="modal-card wide-modal glass-panel">
+      <div class="modal-header">
+        <div>
+          <h3 id="modal-subject-title">Subject</h3>
+          <div id="modal-subject-meta" class="muted small"></div>
+        </div>
+        <button id="modal-close" class="btn-icon" aria-label="Close">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- SYLLABUS / WEEK PLAN MODAL -->
+  <div id="syllabus-modal" class="modal-backdrop hidden">
+    <div class="modal-card wide-modal glass-panel">
+      <div class="modal-header">
+        <div>
+          <h3 id="syl-modal-title">Syllabus</h3>
+          <div id="syl-modal-meta" class="muted small"></div>
+        </div>
+        <div class="inline-controls">
+          <button id="syl-open-btn" class="btn-ghost" data-i18n="openPdfExternal">Open PDF</button>
+          <button id="syl-download-btn" class="btn-primary" data-i18n="downloadSyllabus">Download PDF</button>
+          <button id="syl-modal-close" class="btn-icon" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div id="syl-modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
